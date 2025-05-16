@@ -1,1 +1,1 @@
-# Chintala-Talks
+# ChintalaTalks
