@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>chintal'ak's</title>
+        <style>
+            .mic-btn {
+                font-size: 60px;
+                cursor: pointer;
+                color: #555;
+            }
+            .mic-btn.active {
+                color: red;
+            }
+            #output {
+                margin-top: 20px;
+                font-size: 18px;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Click the mic and speak...</h2>
+        <div>
+            <select id="langSelect">
+                <option value="en-US">English (US)</option>
+                <option value="te-IN">Telugu (India)</option>
+                <option value="ga-IE" hidden>Irish (Ireland)</option>
+            </select>
+            <span id="mic" class="mic-btn">&#127908;</span> <!-- Unicode mic icon 🎤 -->
+        </div>
+        <button id="stopTTSBtn">Stop Speaking</button>
+
+        <div id="output"></div>
+    </body>
+</html>
+<script>
+    const micBtn = document.getElementById('mic');
+    const output = document.getElementById('output');
+    const langSelector = document.getElementById("langSelect");
+    let recognition;
+    let isListening = false;
+    let resultReceived = false;
+
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Your browser doesn't support speech recognition.");
+    } else {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        langSelector.addEventListener("change", function () {
+            const lang = langSelector.value;
+            recognition.lang = lang;
+        });
+
+        recognition.onstart = () => {
+            isListening = true;
+            resultReceived = false;
+            micBtn.classList.add('active');
+            output.innerHTML = "Listening...";
+        };
+
+        recognition.onresult = (event) => {
+            resultReceived = true;
+            const transcript = event.results[0][0].transcript;
+            sendToServer(transcript);
+            output.innerHTML = "You said: " + transcript;
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            micBtn.classList.remove('active');
+            if (!resultReceived) {
+                output.innerHTML = "Didn't catch that. Please try again.";
+            }
+        };
+
+        recognition.onerror = (event) => {
+            output.innerHTML = "Error occurred: " + event.error;
+            isListening = false;
+            micBtn.classList.remove('active');
+        };
+    }
+
+    micBtn.addEventListener('click', () => {
+        if (isListening) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    });
+
+    function sendToServer(text) {
+        console.log("Sending to server:", text);  // Debug line
+
+        fetch("/speaker/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text: text })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Server responded with status ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.response) {
+                const reply = data.response;
+                output.innerHTML += "<br><strong>Response:</strong> " + reply;
+                speak(reply);
+            } else {
+                throw new Error(data.error || "No response key in JSON.");
+            }
+        })
+        .catch(error => {
+            console.error("Fetch error:", error);
+            output.innerHTML += `<br><span style="color:red">Error: ${error.message}</span>`;
+        });
+    }
+
+    function speak(text) {
+        const synth = window.speechSynthesis;
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'te-IN';
+        synth.speak(utter);
+    }
+    document.getElementById("stopTTSBtn").addEventListener("click", function () {
+        speechSynthesis.cancel();  // Immediately stops any speaking
+    });
+</script>
